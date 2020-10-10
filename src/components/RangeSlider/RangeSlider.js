@@ -1,11 +1,49 @@
 import React from "react";
 
 export function RangeSlider(props) {
-  const { defaultValue, steps, widthStyle } = props;
+  let { defaultValue, steps, widthStyle } = props;
+  if (!widthStyle) {
+    widthStyle = "400px";
+  }
   const widthLen = parseInt(widthStyle);
   const widthType = widthStyle.substr(widthLen);
 
   const [value, setValue] = React.useState(defaultValue);
+  const inputRef = React.useRef();
+  const refSlider = React.useRef();
+  const refSliderInnerWrapper = React.useRef();
+
+  // TODO throttle
+  const onDragging = React.useCallback(
+    (mEvent) => {
+      const sliderWrapperRect = refSliderInnerWrapper.current.getBoundingClientRect();
+      const sliderRect = refSlider.current.getBoundingClientRect();
+      const sliderCenterOffset = sliderRect.width / 2;
+      const newPos =
+        mEvent.screenX - sliderWrapperRect.left - sliderCenterOffset;
+
+      // only animate if within slider rail
+      if (newPos < 0) {
+        return;
+      }
+      console.log(newPos, sliderWrapperRect.left + sliderWrapperRect.width);
+      if (newPos > sliderWrapperRect.width - sliderRect.width) {
+        return;
+      }
+      refSlider.current.style.left = `${newPos}px`;
+    },
+    [refSlider]
+  );
+
+  const dragHandler = () => {
+    window.addEventListener("mousemove", onDragging);
+    window.addEventListener("mouseup", onDragStop);
+  };
+
+  const onDragStop = () => {
+    window.removeEventListener("mousemove", onDragging);
+    window.removeEventListener("mouseup", dragHandler);
+  };
 
   const sliderOuterWrapperStyle = {
     height: "40px",
@@ -14,7 +52,6 @@ export function RangeSlider(props) {
 
   const sliderInnerWrapperStyle = {
     height: "40px",
-    width: "200px",
   };
 
   const sliderStyle = {
@@ -24,6 +61,7 @@ export function RangeSlider(props) {
     background: "black",
     position: "absolute",
     borderRadius: "100%",
+    outline: "none",
   };
 
   const railSharedStyle = {
@@ -49,12 +87,24 @@ export function RangeSlider(props) {
       <div
         className="range-slider-inner-wrapper"
         style={sliderInnerWrapperStyle}
+        ref={refSliderInnerWrapper}
       >
         <div className="range-slider-rail-before" style={railBeforeStyle}></div>
         <div className="range-slider-rail-after" style={railAfterStyle}></div>
-        <div className="range-slider-slider" style={sliderStyle}></div>
+        <div
+          ref={refSlider}
+          className="range-slider-slider"
+          style={sliderStyle}
+          onMouseDown={dragHandler}
+        ></div>
       </div>
-      <input type="range" min="1" max="5" style={{ display: "none" }} />
+      <input
+        ref={inputRef}
+        type="range"
+        min="1"
+        max={`${steps}`}
+        style={{ display: "none" }}
+      />
     </div>
   );
 }
