@@ -1,5 +1,6 @@
 .App {
-  margin: 400px 20%;
+  margin: 400px auto;
+  display: block;
   text-align: center;
 }
 

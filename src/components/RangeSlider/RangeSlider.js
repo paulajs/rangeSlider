@@ -1,19 +1,58 @@
 import React from "react";
 
+const closestValue = (needle, haystack) => {
+  return haystack.reduce((a, b) => {
+    let aDiff = Math.abs(a - needle);
+    let bDiff = Math.abs(b - needle);
+
+    if (aDiff == bDiff) {
+      return a > b ? a : b;
+    } else {
+      return bDiff < aDiff ? b : a;
+    }
+  });
+};
+
 export function RangeSlider(props) {
-  let { defaultValue, steps, widthStyle } = props;
+  let { sliderName, sliderId, startStep, steps, widthStyle } = props;
+  if (!startStep) {
+    startStep = 1;
+  }
   if (!widthStyle) {
     widthStyle = "400px";
   }
+  if (!steps) {
+    steps = 4;
+  }
   const widthLen = parseInt(widthStyle);
-  const widthType = widthStyle.substr(widthLen);
 
-  const [value, setValue] = React.useState(defaultValue);
+  const [step, setStep] = React.useState(startStep - 1); // zero index inside
+  const [snapPoints, setSnapPoints] = React.useState([]);
+  const [sliderPosition, setSliderPosition] = React.useState(0);
   const inputRef = React.useRef();
   const refSlider = React.useRef();
   const refSliderInnerWrapper = React.useRef();
+  const refRailBefore = React.useRef();
+  const refRailAfter = React.useRef();
 
-  // TODO throttle
+  // setup snap points
+  React.useEffect(() => {
+    const sliderRect = refSlider.current.getBoundingClientRect();
+    const sliderWrapperRect = refSliderInnerWrapper.current.getBoundingClientRect();
+    const snapWidth = sliderWrapperRect.width / (steps - 1);
+    const points = [];
+    for (let i = 0; i < steps; i++) {
+      points.push(i && i * snapWidth - sliderRect.width);
+    }
+    setSnapPoints(points);
+  }, []);
+
+  React.useEffect(() => {
+    const newPos = snapPoints[step];
+    setSliderPosition(newPos);
+  }, [step, snapPoints]);
+
+  // TODO debounce
   const onDragging = React.useCallback(
     (mEvent) => {
       const sliderWrapperRect = refSliderInnerWrapper.current.getBoundingClientRect();
@@ -21,16 +60,26 @@ export function RangeSlider(props) {
       const sliderCenterOffset = sliderRect.width / 2;
       const newPos =
         mEvent.screenX - sliderWrapperRect.left - sliderCenterOffset;
-
       // only animate if within slider rail
       if (newPos < 0) {
         return;
       }
-      console.log(newPos, sliderWrapperRect.left + sliderWrapperRect.width);
       if (newPos > sliderWrapperRect.width - sliderRect.width) {
         return;
       }
+      // set slider
       refSlider.current.style.left = `${newPos}px`;
+      // set before rail
+      refRailBefore.current.style.width = refSlider.current.style.left;
+      const sliderMiddle = parseInt(sliderRect.width) / 2;
+      refRailBefore.current.style.marginLeft = `${sliderMiddle}px`;
+      // set after rail
+      const wrapperRect = refSliderInnerWrapper.current.getBoundingClientRect();
+      refRailAfter.current.style.marginLeft = `${newPos + sliderMiddle}px`;
+
+      refRailAfter.current.style.width = `${parseInt(
+        wrapperRect.width - newPos - parseInt(sliderRect.width)
+      )}px`;
     },
     [refSlider]
   );
@@ -40,19 +89,53 @@ export function RangeSlider(props) {
     window.addEventListener("mouseup", onDragStop);
   };
 
-  const onDragStop = () => {
+  const onDragStop = React.useCallback(() => {
     window.removeEventListener("mousemove", onDragging);
-    window.removeEventListener("mouseup", dragHandler);
-  };
+    window.removeEventListener("mouseup", onDragStop);
+    const v = refSlider.current.style.left;
+    setSliderPosition(parseInt(v));
+  });
 
   const sliderOuterWrapperStyle = {
     height: "40px",
+    width: widthStyle,
     position: "relative",
   };
 
   const sliderInnerWrapperStyle = {
     height: "40px",
   };
+
+  const setImmediateStyles = () => {
+    // snap the slider the snapPoints closest, set the rail widths and margins
+    const sliderSnappedPosition =
+      sliderPosition && snapPoints && closestValue(sliderPosition, snapPoints);
+    if (
+      refSlider.current &&
+      refRailAfter.current &&
+      refRailBefore.current &&
+      refSliderInnerWrapper.current
+    ) {
+      // set snapped slider position
+      refSlider.current.style.left = `${sliderSnappedPosition || 0}px`;
+      // set before rail
+      refRailBefore.current.style.width = refSlider.current.style.left;
+      const sliderRect = refSlider.current.getBoundingClientRect();
+      const sliderMiddle = parseInt(sliderRect.width) / 2;
+      refRailBefore.current.style.marginLeft = `${sliderMiddle}px`;
+      // set after rail
+      const wrapperRect = refSliderInnerWrapper.current.getBoundingClientRect();
+      refRailAfter.current.style.marginLeft = `${
+        sliderSnappedPosition + sliderMiddle
+      }px`;
+
+      refRailAfter.current.style.width = `${parseInt(
+        wrapperRect.width - sliderSnappedPosition - parseInt(sliderRect.width)
+      )}px`;
+    }
+  };
+
+  setImmediateStyles();
 
   const sliderStyle = {
     cursor: "pointer",
@@ -61,14 +144,13 @@ export function RangeSlider(props) {
     background: "black",
     position: "absolute",
     borderRadius: "100%",
-    outline: "none",
+    userSelect: "none",
   };
 
   const railSharedStyle = {
     marginTop: "10px",
     height: "20px",
     display: "block",
-    width: "100%",
     position: "absolute",
   };
 
@@ -89,8 +171,16 @@ export function RangeSlider(props) {
         style={sliderInnerWrapperStyle}
         ref={refSliderInnerWrapper}
       >
-        <div className="range-slider-rail-before" style={railBeforeStyle}></div>
-        <div className="range-slider-rail-after" style={railAfterStyle}></div>
+        <div
+          ref={refRailBefore}
+          className="range-slider-rail-before"
+          style={railBeforeStyle}
+        ></div>
+        <div
+          ref={refRailAfter}
+          className="range-slider-rail-after"
+          style={railAfterStyle}
+        ></div>
         <div
           ref={refSlider}
           className="range-slider-slider"
@@ -99,10 +189,13 @@ export function RangeSlider(props) {
         ></div>
       </div>
       <input
+        name={sliderName}
+        id={sliderId}
         ref={inputRef}
         type="range"
         min="1"
         max={`${steps}`}
+        defaultValue={step}
         style={{ display: "none" }}
       />
     </div>
